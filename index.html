@@ -600,7 +600,7 @@ function buildSliders() {
     const row = document.createElement('div');
     row.className = 'slider-row';
     row.innerHTML = `
-      <label>${d.label}<br><span class="paper-name">model name: ${d.paperName}</span></label>
+      <label>${d.label}</label>
       <div class="desc">${d.desc}</div>
       <div class="input-line">
         <input type="range" id="slider-${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${state[d.key]}">
