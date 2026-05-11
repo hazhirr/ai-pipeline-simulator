@@ -1,0 +1,814 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Pipeline Model — Interactive Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e3e3e7;
+    --text: #1a1a1a;
+    --muted: #666;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  header {
+    padding: 18px 28px 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 880px;
+    line-height: 1.5;
+  }
+  main {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 18px;
+    padding: 18px;
+    /* Fill the viewport so the plot section can use all remaining height */
+    height: calc(100vh - 80px);
+    min-height: 540px;
+  }
+  aside#controls {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-y: auto;
+    max-height: calc(100vh - 110px);
+    position: sticky;
+    top: 18px;
+  }
+  aside h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+  }
+  .slider-row {
+    margin-bottom: 18px;
+  }
+  .slider-row label {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .slider-row .paper-name {
+    color: var(--muted);
+    font-style: italic;
+    font-weight: normal;
+    font-size: 12px;
+  }
+  .slider-row .desc {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 2px 0 6px;
+    line-height: 1.4;
+  }
+  .slider-row .input-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .slider-row .val {
+    min-width: 56px;
+    text-align: right;
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 13px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .status {
+    margin-bottom: 16px;
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #f6f8fb;
+    color: #444;
+  }
+  .status.collapse {
+    background: #fff1f0;
+    border-color: #fca5a5;
+    color: #7f1d1d;
+  }
+  .status.collapse strong { color: #b91c1c; }
+  .status.ok {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #14532d;
+  }
+  .button-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  button {
+    flex: 1;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button:hover { opacity: 0.92; }
+  section#plots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 14px;
+    /* Stretch to fill the main grid row */
+    align-self: stretch;
+    overflow: hidden;
+  }
+  .chart-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: min(240px, 38vh);
+  }
+  .chart-card h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+  }
+  .chart-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;   /* allows flex child to shrink below content size */
+  }
+  footer {
+    padding: 12px 28px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  /* Medium windows: narrow sidebar */
+  @media (max-width: 1200px) {
+    main {
+      grid-template-columns: 260px 1fr;
+    }
+  }
+  /* Small windows / portrait tablets: stack vertically */
+  @media (max-width: 820px) {
+    main {
+      grid-template-columns: 1fr;
+      height: auto;
+    }
+    aside#controls {
+      max-height: 40vh;
+      position: static;
+    }
+    section#plots {
+      grid-template-columns: 1fr;
+      grid-template-rows: repeat(4, minmax(260px, 40vh));
+    }
+  }
+  /* Very small screens */
+  @media (max-width: 480px) {
+    header h1 { font-size: 16px; }
+    aside#controls { max-height: 35vh; }
+    section#plots {
+      grid-template-rows: repeat(4, minmax(220px, 36vh));
+    }
+    .chart-card { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AI Pipeline Model &mdash; Interactive Simulator by Hazhir Rahmandad (hazhir@mit.edu)</h1>
+  <p>
+    A live, browser-based version of the AI Pipeline system-dynamics model. The industry starts in equilibrium;
+    AI capability begins growing at month 10 and progressively automates a feasible fraction of ordinary work
+    (and, with delay, expert work). Adjust the parameters on the left and watch how the industry's output, employment,
+    wages, and profits evolve over 500 months.
+  </p>
+</header>
+
+<main>
+  <aside id="controls">
+    <h2>Parameters</h2>
+    <div id="status" class="status"></div>
+    <div id="sliders"></div>
+    <div class="button-row">
+      <button class="secondary" id="reset-btn">Reset to defaults</button>
+    </div>
+  </aside>
+
+  <section id="plots">
+    <div class="chart-card">
+      <h3>Production &amp; Demand Potential</h3>
+      <div class="chart-wrap"><canvas id="chart1"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Labor &amp; Labor Earnings</h3>
+      <div class="chart-wrap"><canvas id="chart2"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Wages &amp; Lifetime Expected Earnings</h3>
+      <div class="chart-wrap"><canvas id="chart3"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Revenue &amp; Expenses</h3>
+      <div class="chart-wrap"><canvas id="chart4"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Source model: AIPipeline V3.10 system-dynamics model. Simulation runs entirely in your browser &mdash; no data leaves your device.
+</footer>
+
+<script>
+// ===========================================================================
+// PARAMETER DEFINITIONS
+// ===========================================================================
+
+const PARAM_DEFS = [
+  {
+    key: 'cesRho',
+    label: 'CES Substitution Parameter (ρ)',
+    paperName: 'CES rho',
+    desc: 'Substitutability of ordinary and expert labor. σ = 1/(1−ρ). Negative → complements; ρ≈0 → Cobb–Douglas; positive → substitutes.',
+    min: -3, max: 0.8, step: 0.1, default: -1
+  },
+  {
+    key: 'epsilon',
+    label: 'Price Elasticity of Demand (ε)',
+    paperName: 'Price Elasticity of Demand epsilon',
+    desc: 'Demand responsiveness to price. More negative → larger quantity response to a price drop. Services are typically inelastic (|ε| &lt; 1).',
+    min: -3, max: -0.1, step: 0.1, default: -0.5
+  },
+  {
+    key: 'expertFracRel',
+    label: 'Expert vs Ordinary AI Capability Ratio',
+    paperName: 'Expert Fraction Relative to Ordinary',
+    desc: 'Long-run AI capability on expert tasks relative to ordinary tasks. At 0.8, AI covers 80% as much expert work; at 0.1, expert work stays mostly human.',
+    min: 0.1, max: 1.0, step: 0.05, default: 0.8
+  },
+  {
+    key: 'aiGrowthTime',
+    label: 'AI Capability Growth Time (months)',
+    paperName: 'AI Growth Time',
+    desc: '1/e maturation time of the AI S-curve on ordinary tasks. Smaller → faster takeoff.',
+    min: 6, max: 60, step: 1, default: 24
+  },
+  {
+    key: 'workerAdjTime',
+    label: 'Workforce Adjustment Time (months)',
+    paperName: 'Worker Adj Time',
+    desc: 'Lead time to close the gap between desired and actual worker headcount. Smaller → faster hiring/firing.',
+    min: 2, max: 30, step: 1, default: 6
+  },
+  {
+    key: 'aiCost',
+    label: 'AI Cost per Person-Equivalent (k$/month)',
+    paperName: 'AI Cost c a',
+    desc: 'Monthly cost of one AI person-equivalent. Default 1 = 10× cheaper than an ordinary worker (wage 10 k$/mo).',
+    min: 0.1, max: 10, step: 0.1, default: 1
+  },
+  {
+    key: 'maxAutomated',
+    label: 'Max Fraction of Ordinary Work Automatable',
+    paperName: 'MaxOrdinaryWork Automated',
+    desc: 'Ceiling on the share of ordinary work AI can ever perform (1 = all, 0 = none).',
+    min: 0, max: 1, step: 0.05, default: 1
+  },
+  {
+    key: 'timeToBuild',
+    label: 'Time to Develop Expertise (months)',
+    paperName: 'Time to Build Experience t x',
+    desc: 'Tenure before an ordinary worker can be promoted to expert. Longer → narrower expert pipeline.',
+    min: 36, max: 120, step: 6, default: 84
+  }
+];
+
+// ===========================================================================
+// SIMULATION ENGINE
+// ===========================================================================
+
+function runSimulation(p) {
+  // --- Fixed model parameters (not user-tunable in this version) ---
+  const cesAlpha = 0.6;
+  const baseDemand = 100;
+  const careerLength = 360;
+  const complexTaskMult = 3;          // Complex Task Multiplier p
+  const laborUnitConv = 1;
+  const productivityFactor = 1;
+  const promotableFrac = 0.15;        // Promotable Fraction pi max
+  const aiAdoptionTime = 18;
+  const expertAIGrowthDelay = 36;
+  const aiStartTime = 10;
+  const minWage = 3;
+  const initialWorkerWage = 10;
+  const wageAdjT = 12;
+  const incomeSensEntry = 0.1;
+  const jobMarketTime = 20;
+  const costEducation = 200;
+  const laborShare = 0.01;
+  const timeToPerceiveCosts = 6;
+  const entrantMult = 1;
+
+  const initialExpertWage = initialWorkerWage * (1 - cesAlpha) / cesAlpha * complexTaskMult; // = 20
+
+  // --- Helpers ---
+  function feasibleAIFracOrd(t) {
+    if (t < aiStartTime) return 0;
+    const x = Math.exp(-(t - aiStartTime) / p.aiGrowthTime);
+    return p.maxAutomated * (1 - Math.min(1, x));
+  }
+  function ordinaryEquivalent(W, AO, faf) {
+    if (faf >= 1 - 1e-9) return (AO + W) * laborUnitConv;          // AI fully unconstrained
+    if (faf < 1e-9) return W * laborUnitConv;                       // no AI feasible
+    const cap = W * faf / (1 - faf);
+    return (Math.min(AO, cap) + W) * laborUnitConv;
+  }
+  function expertEquivalent(E, AX, faf) {
+    if (faf >= 1 - 1e-9) return (AX + E) * laborUnitConv * complexTaskMult;
+    if (faf < 1e-9) return E * laborUnitConv * complexTaskMult;
+    const cap = E * faf / (1 - faf);
+    return (Math.min(AX, cap) + E) * laborUnitConv * complexTaskMult;
+  }
+  function cesProduction(Lo, Lx) {
+    const Lo_s = Math.max(Lo, 1e-9), Lx_s = Math.max(Lx, 1e-9);
+    if (Math.abs(p.cesRho) < 0.001) {
+      return productivityFactor * Math.pow(Lo_s, cesAlpha) * Math.pow(Lx_s, 1 - cesAlpha);
+    }
+    return productivityFactor * Math.pow(
+      cesAlpha * Math.pow(Lo_s, p.cesRho) + (1 - cesAlpha) * Math.pow(Lx_s, p.cesRho),
+      1 / p.cesRho
+    );
+  }
+  function cesRatio(eqWO, eqWX) {
+    const r1 = (1 - cesAlpha) / cesAlpha;
+    const r2 = (eqWO * complexTaskMult) / Math.max(eqWX, 1e-9);
+    const exponent = 1 / (1 - p.cesRho);
+    return Math.pow(Math.max(r1, 1e-9), exponent) * Math.pow(Math.max(r2, 1e-9), exponent);
+  }
+  function cesScale(r) {
+    const rs = Math.max(r, 1e-6);
+    if (Math.abs(p.cesRho) < 0.001) {
+      return Math.pow(rs, -(1 - cesAlpha));
+    }
+    return Math.pow(cesAlpha + (1 - cesAlpha) * Math.pow(rs, p.cesRho), -1 / p.cesRho);
+  }
+
+  // --- Initial conditions (at equilibrium, no AI yet) ---
+  const eqWO0 = initialWorkerWage;
+  const eqWX0 = initialExpertWage;
+  const r0 = cesRatio(eqWO0, eqWX0);
+  const s0 = cesScale(r0);
+  const totalDesOrd0 = baseDemand / productivityFactor * s0 / laborUnitConv;
+  const totalDesExp0 = totalDesOrd0 * r0 / complexTaskMult;
+  const desW0 = totalDesOrd0;
+  const desE0 = totalDesExp0;
+  const initialMarginalCost = (eqWO0 + eqWX0 / complexTaskMult) / productivityFactor / laborUnitConv;
+
+  const ret0 = desE0 / (careerLength - p.timeToBuild);
+  const promo0 = ret0;
+  const quit0 = desW0 / p.timeToBuild - promo0;
+  const pf0 = promo0 / (promo0 + quit0);
+
+  const outsideOption = initialWorkerWage - costEducation / careerLength;
+
+  const ltInit = initialWorkerWage * p.timeToBuild +
+    (initialExpertWage * pf0 + (1 - pf0) * initialWorkerWage) * (careerLength - p.timeToBuild);
+  const emiInit = (ltInit - costEducation) / careerLength;
+  let initHP = laborShare + (1 - laborShare) * Math.exp(incomeSensEntry * (outsideOption - emiInit));
+  initHP = Math.min(1, Math.max(0, initHP));
+
+  const potentialEntrants = (desW0 / p.timeToBuild) / laborShare;
+
+  // --- Stock initial values ---
+  let W = desW0;
+  let E = desE0;
+  let AO = 0;
+  let AX = 0;
+  let PMC = initialMarginalCost;
+  let FAFE = 0;
+  let WW = initialWorkerWage;
+  let EW = initialExpertWage;
+  let HP = initHP;
+
+  // --- Integration setup ---
+  const dt = 1/16;
+  const finalTime = 500;
+  const saveStep = 1;
+
+  const out = {
+    time: [], consumedOutput: [], maxTaskDemand: [],
+    W: [], E: [], laborEarnings: [],
+    workerWage: [], expertWage: [], lifetimeEarnings: [],
+    totalRevenue: [], totalCost: [],
+    collapsed: false, collapseTime: null
+  };
+  let nextSave = 0;
+  let lowOutputRun = 0; // consecutive saves with very low output
+  const steps = Math.ceil(finalTime / dt) + 1;
+
+  for (let i = 0; i < steps; i++) {
+    const t = i * dt;
+
+    // --- Auxiliary computations from current stocks ---
+    const FAFO = feasibleAIFracOrd(t);
+    const Lo = ordinaryEquivalent(W, AO, FAFO);
+    const Lx = expertEquivalent(E, AX, FAFE);
+    const Y = cesProduction(Lo, Lx);
+
+    const normCompPrice = PMC / initialMarginalCost;
+    const maxTaskDemand = baseDemand * Math.pow(Math.max(normCompPrice, 1e-9), p.epsilon);
+    const consumedOutput = Math.min(maxTaskDemand, Y);
+
+    const xidz = (Math.abs(p.epsilon) > 1e-9) ? 1 / p.epsilon : 1;
+    const ratioCY = consumedOutput / baseDemand;
+    const normSupplyPrice = Math.pow(Math.max(ratioCY, 1e-9), xidz);
+    const price = initialMarginalCost * normSupplyPrice;
+
+    const laborEarnings = WW * W + EW * E;
+    const totalCost = laborEarnings + (AO + AX) * p.aiCost;
+    const avgCost = (consumedOutput > 1e-9) ? totalCost / consumedOutput : initialMarginalCost;
+    const totalRevenue = consumedOutput * price;
+
+    const Lo_s = Math.max(Lo, 1e-9), Lx_s = Math.max(Lx, 1e-9);
+    const yPF = Y / productivityFactor;
+    const marginalOrdValue = price * cesAlpha * productivityFactor *
+      Math.pow(Math.max(yPF / Lo_s, 1e-9), 1 - p.cesRho) * laborUnitConv;
+    const marginalExpValue = price * (1 - cesAlpha) * productivityFactor *
+      Math.pow(Math.max(yPF / Lx_s, 1e-9), 1 - p.cesRho) * laborUnitConv * complexTaskMult;
+
+    // --- Desired levels (forward-looking, used for adjustment toward target) ---
+    const eqWO = p.aiCost * FAFO + (1 - FAFO) * WW;
+    const eqWX = EW * (1 - FAFE) + FAFE * p.aiCost;
+    const r = cesRatio(eqWO, eqWX);
+    const s = cesScale(r);
+    const totalDesOrd = maxTaskDemand / productivityFactor * s / laborUnitConv;
+    const totalDesExp = totalDesOrd * r / complexTaskMult;
+    const desOrdAI = FAFO * totalDesOrd;
+    const desExpAI = FAFE * totalDesExp;
+    const desW = Math.max(totalDesOrd - AO, totalDesOrd * (1 - FAFO));
+    const desE = Math.max(totalDesExp - AX, totalDesExp * (1 - FAFE));
+
+    // --- Workforce dynamics ---
+    const workerAdjustment = (desW - W) / p.workerAdjTime;
+    const retirement = E / Math.max(careerLength - p.timeToBuild, 1);
+    const desiredPromotion = retirement + (desE - E) / p.workerAdjTime;
+    const maxPromotion = W / p.timeToBuild * promotableFrac;
+    const promotion = Math.max(0, Math.min(maxPromotion, desiredPromotion));
+    const layoffs = Math.max(0, -desiredPromotion);
+    const quitting = Math.max(0, W / p.timeToBuild - promotion);
+
+    const promotionFrac = (promotion + quitting > 1e-9) ? promotion / (promotion + quitting) : 0;
+
+    const lifetimeEarnings = outsideOption * careerLength * (1 - HP) +
+      HP * (WW * p.timeToBuild +
+            (EW * promotionFrac + (1 - promotionFrac) * Math.max(outsideOption, WW)) *
+            (careerLength - p.timeToBuild));
+    const emi = (lifetimeEarnings - costEducation) / careerLength;
+
+    const share = 1 / (1 + (1/laborShare - 1) * Math.exp(incomeSensEntry * (outsideOption - emi)));
+    const maxAvail = potentialEntrants * share;
+    const totalTransition = promotion + quitting;
+    const desiredHiring = Math.max(0, totalTransition + workerAdjustment);
+    const netHiring = Math.min(maxAvail * entrantMult, totalTransition + workerAdjustment);
+
+    // --- Save outputs at every saveStep ---
+    if (t + 1e-9 >= nextSave) {
+      // Collapse detection: when output stays at <1% of baseline for 10+ months,
+      // we're in a degenerate regime — freeze plotted values to avoid 10^19 noise.
+      if (!out.collapsed) {
+        if (consumedOutput < 1.0) lowOutputRun++; else lowOutputRun = 0;
+        if (lowOutputRun >= 10) {
+          out.collapsed = true;
+          out.collapseTime = Math.round(t) - 10;
+        }
+      }
+      const useNaN = out.collapsed;
+      out.time.push(Math.round(t));
+      out.consumedOutput.push(useNaN ? NaN : consumedOutput);
+      out.maxTaskDemand.push(useNaN ? NaN : maxTaskDemand);
+      out.W.push(useNaN ? NaN : W);
+      out.E.push(useNaN ? NaN : E);
+      out.laborEarnings.push(useNaN ? NaN : laborEarnings);
+      out.workerWage.push(useNaN ? NaN : WW);
+      out.expertWage.push(useNaN ? NaN : EW);
+      out.lifetimeEarnings.push(useNaN ? NaN : lifetimeEarnings);
+      out.totalRevenue.push(useNaN ? NaN : totalRevenue);
+      out.totalCost.push(useNaN ? NaN : totalCost);
+      nextSave += saveStep;
+    }
+
+    if (t >= finalTime) break;
+
+    // --- Derivatives ---
+    const dW = netHiring - promotion - quitting;
+    const dE = promotion - layoffs - retirement;
+    const dAO = (desOrdAI - AO) / aiAdoptionTime;
+    const dAX = (desExpAI - AX) / aiAdoptionTime;
+    const dPMC = (avgCost - PMC) / timeToPerceiveCosts;
+    const dFAFE = (FAFO * p.expertFracRel - FAFE) / expertAIGrowthDelay;
+    const dWW = (Math.max(marginalOrdValue, minWage) - WW) / wageAdjT;
+    const dEW = (Math.max(marginalExpValue, minWage) - EW) / wageAdjT;
+    const hpTarget = (maxAvail > 1e-9) ? Math.min(1, desiredHiring / maxAvail) : 1;
+    const dHP = (hpTarget - HP) / jobMarketTime;
+
+    // --- Euler update ---
+    W += dW * dt;
+    E += dE * dt;
+    AO += dAO * dt;
+    AX += dAX * dt;
+    PMC += dPMC * dt;
+    FAFE += dFAFE * dt;
+    WW += dWW * dt;
+    EW += dEW * dt;
+    HP += dHP * dt;
+
+    // Safety clamps
+    W = Math.max(0, W);
+    E = Math.max(0, E);
+    AO = Math.max(0, AO);
+    AX = Math.max(0, AX);
+    PMC = Math.max(1e-6, PMC);
+    FAFE = Math.max(0, Math.min(1, FAFE));
+    WW = Math.max(minWage, WW);
+    EW = Math.max(minWage, EW);
+    HP = Math.max(0, Math.min(1, HP));
+  }
+
+  return out;
+}
+
+// ===========================================================================
+// UI WIRING
+// ===========================================================================
+
+const state = {};
+PARAM_DEFS.forEach(d => state[d.key] = d.default);
+
+function buildSliders() {
+  const container = document.getElementById('sliders');
+  container.innerHTML = '';
+  PARAM_DEFS.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+    row.innerHTML = `
+      <label>${d.label}<br><span class="paper-name">model name: ${d.paperName}</span></label>
+      <div class="desc">${d.desc}</div>
+      <div class="input-line">
+        <input type="range" id="slider-${d.key}" min="${d.min}" max="${d.max}" step="${d.step}" value="${state[d.key]}">
+        <span class="val" id="val-${d.key}">${formatVal(state[d.key], d.step)}</span>
+      </div>
+    `;
+    container.appendChild(row);
+    const slider = row.querySelector(`#slider-${d.key}`);
+    const valEl = row.querySelector(`#val-${d.key}`);
+    slider.addEventListener('input', () => {
+      state[d.key] = parseFloat(slider.value);
+      valEl.textContent = formatVal(state[d.key], d.step);
+      scheduleUpdate();
+    });
+  });
+}
+
+function formatVal(v, step) {
+  if (step >= 1) return v.toFixed(0);
+  if (step >= 0.1) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function resetDefaults() {
+  PARAM_DEFS.forEach(d => {
+    state[d.key] = d.default;
+    const slider = document.getElementById(`slider-${d.key}`);
+    const valEl = document.getElementById(`val-${d.key}`);
+    if (slider) slider.value = d.default;
+    if (valEl) valEl.textContent = formatVal(d.default, d.step);
+  });
+  update();
+}
+
+// ===========================================================================
+// CHARTS
+// ===========================================================================
+
+const charts = {};
+
+function chartCommonOpts(yLabel, y2Label) {
+  const scales = {
+    x: {
+      type: 'linear',
+      title: { display: true, text: 'Time (months)', color: '#666', font: { size: 11 } },
+      ticks: { color: '#666', font: { size: 10 }, maxTicksLimit: 8 },
+      grid: { color: '#eee' }
+    },
+    y: {
+      type: 'linear',
+      position: 'left',
+      title: { display: true, text: yLabel, color: '#666', font: { size: 11 } },
+      ticks: { color: '#666', font: { size: 10 } },
+      grid: { color: '#eee' }
+    }
+  };
+  if (y2Label) {
+    scales.y1 = {
+      type: 'linear',
+      position: 'right',
+      title: { display: true, text: y2Label, color: '#666', font: { size: 11 } },
+      ticks: { color: '#666', font: { size: 10 } },
+      grid: { drawOnChartArea: false }
+    };
+  }
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'top',
+        align: 'end',
+        labels: { boxWidth: 12, font: { size: 11 }, color: '#333' }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+        }
+      }
+    },
+    elements: { point: { radius: 0 }, line: { borderWidth: 1.6, tension: 0 } },
+    scales
+  };
+}
+
+function buildCharts(data) {
+  const t = data.time;
+  charts.chart1 = new Chart(document.getElementById('chart1'), {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        { label: 'Consumed Output', data: data.consumedOutput, borderColor: '#2563eb', backgroundColor: 'transparent' },
+        { label: 'Max Task Demand', data: data.maxTaskDemand, borderColor: '#d97706', borderDash: [4,3], backgroundColor: 'transparent' }
+      ]
+    },
+    options: chartCommonOpts('Tasks / month')
+  });
+  charts.chart2 = new Chart(document.getElementById('chart2'), {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        { label: 'Ordinary Workers', data: data.W, borderColor: '#2563eb', backgroundColor: 'transparent', yAxisID: 'y' },
+        { label: 'Experts', data: data.E, borderColor: '#d97706', backgroundColor: 'transparent', yAxisID: 'y' },
+        { label: 'Labor Earnings (k$/mo)', data: data.laborEarnings, borderColor: '#16a34a', borderDash: [4,3], backgroundColor: 'transparent', yAxisID: 'y1' }
+      ]
+    },
+    options: chartCommonOpts('People', 'k$ / month')
+  });
+  charts.chart3 = new Chart(document.getElementById('chart3'), {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        { label: 'Worker Wage', data: data.workerWage, borderColor: '#2563eb', backgroundColor: 'transparent', yAxisID: 'y' },
+        { label: 'Expert Wage', data: data.expertWage, borderColor: '#d97706', backgroundColor: 'transparent', yAxisID: 'y' },
+        { label: 'Lifetime Expected Earnings', data: data.lifetimeEarnings, borderColor: '#16a34a', borderDash: [4,3], backgroundColor: 'transparent', yAxisID: 'y1' }
+      ]
+    },
+    options: chartCommonOpts('k$ / person / month', 'k$ / person')
+  });
+  charts.chart4 = new Chart(document.getElementById('chart4'), {
+    type: 'line',
+    data: {
+      labels: t,
+      datasets: [
+        { label: 'Total Revenue', data: data.totalRevenue, borderColor: '#2563eb', backgroundColor: 'transparent' },
+        { label: 'Total Cost of Production', data: data.totalCost, borderColor: '#d97706', backgroundColor: 'transparent' }
+      ]
+    },
+    options: chartCommonOpts('k$ / month')
+  });
+}
+
+function updateCharts(data) {
+  charts.chart1.data.labels = data.time;
+  charts.chart1.data.datasets[0].data = data.consumedOutput;
+  charts.chart1.data.datasets[1].data = data.maxTaskDemand;
+  charts.chart1.update('none');
+
+  charts.chart2.data.labels = data.time;
+  charts.chart2.data.datasets[0].data = data.W;
+  charts.chart2.data.datasets[1].data = data.E;
+  charts.chart2.data.datasets[2].data = data.laborEarnings;
+  charts.chart2.update('none');
+
+  charts.chart3.data.labels = data.time;
+  charts.chart3.data.datasets[0].data = data.workerWage;
+  charts.chart3.data.datasets[1].data = data.expertWage;
+  charts.chart3.data.datasets[2].data = data.lifetimeEarnings;
+  charts.chart3.update('none');
+
+  charts.chart4.data.labels = data.time;
+  charts.chart4.data.datasets[0].data = data.totalRevenue;
+  charts.chart4.data.datasets[1].data = data.totalCost;
+  charts.chart4.update('none');
+}
+
+// ===========================================================================
+// STATUS DISPLAY
+// ===========================================================================
+
+function updateStatus(data) {
+  const el = document.getElementById('status');
+  if (data.collapsed) {
+    el.className = 'status collapse';
+    el.innerHTML = `<strong>Model collapse detected at ~month ${data.collapseTime}.</strong> The workforce has dwindled to near zero — try a lower Max Fraction Automatable or longer AI Growth Time.`;
+  } else {
+    const finalW = data.W[data.W.length - 1];
+    const finalE = data.E[data.E.length - 1];
+    const finalY = data.consumedOutput[data.consumedOutput.length - 1];
+    el.className = 'status ok';
+    el.innerHTML = `Simulation complete (500 months). Final state: <strong>${finalW.toFixed(0)} workers</strong>, <strong>${finalE.toFixed(0)} experts</strong>, output <strong>${finalY.toFixed(1)}</strong> tasks/mo.`;
+  }
+}
+
+// ===========================================================================
+// UPDATE LOOP
+// ===========================================================================
+
+let _timer = null;
+function scheduleUpdate() {
+  if (_timer) clearTimeout(_timer);
+  _timer = setTimeout(update, 80);
+}
+
+function update() {
+  const data = runSimulation(state);
+  if (charts.chart1) {
+    updateCharts(data);
+  } else {
+    buildCharts(data);
+  }
+  updateStatus(data);
+}
+
+// ===========================================================================
+// INIT
+// ===========================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  buildSliders();
+  document.getElementById('reset-btn').addEventListener('click', resetDefaults);
+  update();
+});
+</script>
+</body>
+</html>
